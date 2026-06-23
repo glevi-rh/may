@@ -81,6 +81,21 @@ func ClaimerContexts() {
 			}).Should(Succeed())
 		})
 
+		It("copies the pipeline label from the Pod to the Claim", func() {
+			podName := "pod-claimer-with-pipeline-label"
+			pipelineLabel := "my-pipeline"
+
+			By("creating a Pod with flavor annotation and pipeline label")
+			createPodWithFlavorAndLabels(podName, claimerTestNamespace, "aws-linux-arm64",
+				map[string]string{"tekton.dev/pipeline": pipelineLabel})
+
+			By("verifying the Claim has the pipeline label")
+			Eventually(func(g Gomega) {
+				c := getClaim(g, claimerTestNamespace, podName)
+				g.Expect(c.Labels).To(HaveKeyWithValue("tekton.dev/pipeline", pipelineLabel))
+			}).Should(Succeed())
+		})
+
 		It("does not create a Claim for Pod without flavor annotation in tenant namespace", func() {
 			podName := "pod-claimer-without-flavor"
 
