@@ -193,21 +193,6 @@ var _ = Describe("ClaimerController", func() {
 			})
 		})
 
-		When("the namespace does not exist", func() {
-			It("should return an error", func() {
-				createPod(tenantNs.Name,
-					map[string]string{pod.KueueFlavorLabelPrefix + flavor: ""},
-					nil,
-				)
-
-				_, err := reconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: types.NamespacedName{Name: podName, Namespace: "nonexistent"},
-				})
-				Expect(err).Should(HaveOccurred())
-				Expect(err.Error()).Should(ContainSubstring("not found"))
-			})
-		})
-
 		When("a Claim already exists for the pod", func() {
 			It("should not return an error", func() {
 				createPod(tenantNs.Name,

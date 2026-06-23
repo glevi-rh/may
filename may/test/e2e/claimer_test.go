@@ -89,9 +89,10 @@ func ClaimerContexts() {
 			createPodWithFlavorAndLabels(podName, claimerTestNamespace, "aws-linux-arm64",
 				map[string]string{"tekton.dev/pipeline": pipelineLabel})
 
-			By("verifying the Claim has the pipeline label")
+			By("verifying the Claim has the pipeline label and correct flavor")
 			Eventually(func(g Gomega) {
 				c := getClaim(g, claimerTestNamespace, podName)
+				g.Expect(c.Spec.Flavor).To(Equal("aws-linux-arm64"))
 				g.Expect(c.Labels).To(HaveKeyWithValue("tekton.dev/pipeline", pipelineLabel))
 			}).Should(Succeed())
 		})
