@@ -24,6 +24,7 @@ import (
 	"github.com/konflux-ci/may/pkg/constants"
 	"github.com/konflux-ci/may/pkg/pod"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -180,16 +181,14 @@ var _ = Describe("ClaimerController", func() {
 					Name:      podName,
 					Namespace: regularNs.Name,
 				}, claim)
-				Expect(err).Should(HaveOccurred())
-				Expect(err.Error()).Should(ContainSubstring("not found"))
+				Expect(apierrors.IsNotFound(err)).Should(BeTrue())
 			})
 		})
 
 		When("the pod does not exist", func() {
 			It("should return an error", func() {
 				_, err := reconcilePod(tenantNs.Name)
-				Expect(err).Should(HaveOccurred())
-				Expect(err.Error()).Should(ContainSubstring("not found"))
+				Expect(apierrors.IsNotFound(err)).Should(BeTrue())
 			})
 		})
 
