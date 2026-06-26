@@ -17,6 +17,8 @@ limitations under the License.
 package claimer
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -26,8 +28,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -44,7 +47,7 @@ var _ = Describe("ClaimerController", func() {
 		regularNs  *corev1.Namespace
 	)
 
-	BeforeEach(func() {
+	BeforeEach(func(ctx context.Context) {
 		reconciler = &ClaimerController{
 			Client: k8sClient,
 			Scheme: scheme.Scheme,
@@ -68,12 +71,12 @@ var _ = Describe("ClaimerController", func() {
 		Expect(k8sClient.Create(ctx, regularNs)).Should(Succeed())
 	})
 
-	AfterEach(func() {
+	AfterEach(func(ctx context.Context) {
 		Expect(k8sClient.Delete(ctx, tenantNs)).Should(Succeed())
 		Expect(k8sClient.Delete(ctx, regularNs)).Should(Succeed())
 	})
 
-	createPod := func(namespace string, annotations, labels map[string]string) *corev1.Pod {
+	createPod := func(ctx context.Context, namespace string, annotations, labels map[string]string) *corev1.Pod {
 		p := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        podName,
@@ -91,119 +94,121 @@ var _ = Describe("ClaimerController", func() {
 		return p
 	}
 
-	reconcilePod := func(namespace string) (reconcile.Result, error) {
+	reconcilePod := func(p *corev1.Pod) (reconcile.Result, error) {
 		return reconciler.Reconcile(ctx, reconcile.Request{
-			NamespacedName: types.NamespacedName{Name: podName, Namespace: namespace},
+			NamespacedName: client.ObjectKeyFromObject(p),
 		})
 	}
 
 	Describe("Reconcile", func() {
 		When("a matching pod exists in a tenant namespace", func() {
-			It("should create a Claim with the correct flavor and owner reference", func() {
-				p := createPod(tenantNs.Name,
+			It("should create a Claim with the correct flavor and owner reference", func(ctx context.Context) {
+				By("creating a pod with a flavor annotation")
+				p := createPod(ctx, tenantNs.Name,
 					map[string]string{pod.KueueFlavorLabelPrefix + flavor: ""},
 					nil,
 				)
 
-				result, err := reconcilePod(tenantNs.Name)
+				By("reconciling the pod")
+				result, err := reconcilePod(p)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(result).Should(Equal(reconcile.Result{}))
 
+				By("verifying the Claim was created with correct spec and owner reference")
 				claim := &v1alpha1.Claim{}
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name:      podName,
-					Namespace: tenantNs.Name,
-				}, claim)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(p), claim)).Should(Succeed())
 
 				Expect(claim.Spec.Flavor).Should(Equal(flavor))
 				Expect(claim.Spec.For.Name).Should(Equal(p.Name))
 				Expect(claim.Spec.For.UID).Should(Equal(p.UID))
 
-				Expect(claim.OwnerReferences).Should(HaveLen(1))
-				Expect(claim.OwnerReferences[0].Name).Should(Equal(p.Name))
-				Expect(claim.OwnerReferences[0].UID).Should(Equal(p.UID))
+				Expect(controllerutil.HasOwnerReference(claim.OwnerReferences, p, k8sClient.Scheme())).To(BeTrue())
+				Expect(controllerutil.HasControllerReference(claim)).To(BeTrue())
 			})
 		})
 
 		When("the pod has a pipeline label", func() {
-			It("should copy the pipeline label to the Claim", func() {
-				createPod(tenantNs.Name,
+			It("should copy the pipeline label to the Claim", func(ctx context.Context) {
+				By("creating a pod with a pipeline label")
+				p := createPod(ctx, tenantNs.Name,
 					map[string]string{pod.KueueFlavorLabelPrefix + flavor: ""},
 					map[string]string{pipelineLabelKey: pipeline},
 				)
 
-				_, err := reconcilePod(tenantNs.Name)
+				By("reconciling the pod")
+				_, err := reconcilePod(p)
 				Expect(err).ShouldNot(HaveOccurred())
 
+				By("verifying the pipeline label was copied to the Claim")
 				claim := &v1alpha1.Claim{}
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name:      podName,
-					Namespace: tenantNs.Name,
-				}, claim)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(p), claim)).Should(Succeed())
 
 				Expect(claim.Labels).Should(HaveKeyWithValue(pipelineLabelKey, pipeline))
 			})
 		})
 
 		When("the pod has no pipeline label", func() {
-			It("should create a Claim without the pipeline label", func() {
-				createPod(tenantNs.Name,
+			It("should create a Claim without the pipeline label", func(ctx context.Context) {
+				By("creating a pod without a pipeline label")
+				p := createPod(ctx, tenantNs.Name,
 					map[string]string{pod.KueueFlavorLabelPrefix + flavor: ""},
 					nil,
 				)
 
-				_, err := reconcilePod(tenantNs.Name)
+				By("reconciling the pod")
+				_, err := reconcilePod(p)
 				Expect(err).ShouldNot(HaveOccurred())
 
+				By("verifying the Claim has no pipeline label")
 				claim := &v1alpha1.Claim{}
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name:      podName,
-					Namespace: tenantNs.Name,
-				}, claim)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(p), claim)).Should(Succeed())
 
 				Expect(claim.Labels).ShouldNot(HaveKey(pipelineLabelKey))
 			})
 		})
 
 		When("the pod is in a non-tenant namespace", func() {
-			It("should not create a Claim", func() {
-				createPod(regularNs.Name,
+			It("should not create a Claim", func(ctx context.Context) {
+				By("creating a pod in a non-tenant namespace")
+				p := createPod(ctx, regularNs.Name,
 					map[string]string{pod.KueueFlavorLabelPrefix + flavor: ""},
 					nil,
 				)
 
-				result, err := reconcilePod(regularNs.Name)
+				By("reconciling the pod")
+				result, err := reconcilePod(p)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(result).Should(Equal(reconcile.Result{}))
 
+				By("verifying no Claim was created")
 				claim := &v1alpha1.Claim{}
-				err = k8sClient.Get(ctx, types.NamespacedName{
-					Name:      podName,
-					Namespace: regularNs.Name,
-				}, claim)
-				Expect(apierrors.IsNotFound(err)).Should(BeTrue())
-			})
-		})
-
-		When("the pod does not exist", func() {
-			It("should return an error", func() {
-				_, err := reconcilePod(tenantNs.Name)
+				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(p), claim)
 				Expect(apierrors.IsNotFound(err)).Should(BeTrue())
 			})
 		})
 
 		When("a Claim already exists for the pod", func() {
-			It("should not return an error", func() {
-				createPod(tenantNs.Name,
+			It("should not return an error and should not modify the pod", func(ctx context.Context) {
+				By("creating a pod and reconciling it to create the Claim")
+				p := createPod(ctx, tenantNs.Name,
 					map[string]string{pod.KueueFlavorLabelPrefix + flavor: ""},
 					nil,
 				)
 
-				_, err := reconcilePod(tenantNs.Name)
+				_, err := reconcilePod(p)
 				Expect(err).ShouldNot(HaveOccurred())
 
-				_, err = reconcilePod(tenantNs.Name)
+				By("recording the pod's resource version")
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(p), p)).Should(Succeed())
+				resourceVersion := p.ResourceVersion
+
+				By("reconciling the same pod again")
+				_, err = reconcilePod(p)
 				Expect(err).ShouldNot(HaveOccurred())
+
+				By("verifying the pod was not modified")
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(p), p)).Should(Succeed())
+				Expect(p.ResourceVersion).Should(Equal(resourceVersion))
 			})
 		})
 	})

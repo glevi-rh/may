@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	maykonfluxcidevv1alpha1 "github.com/konflux-ci/may/api/v1alpha1"
+	// +kubebuilder:scaffold:imports
 )
 
 var (
@@ -57,6 +58,8 @@ var _ = BeforeSuite(func() {
 	var err error
 	err = maykonfluxcidevv1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).ShouldNot(HaveOccurred())
+
+	// +kubebuilder:scaffold:scheme
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
@@ -84,6 +87,14 @@ var _ = AfterSuite(func() {
 	Expect(err).ShouldNot(HaveOccurred())
 })
 
+// getFirstFoundEnvTestBinaryDir locates the first binary in the specified path.
+// ENVTEST-based tests depend on specific binaries, usually located in paths set by
+// controller-runtime. When running tests directly (e.g., via an IDE) without using
+// Makefile targets, the 'BinaryAssetsDirectory' must be explicitly configured.
+//
+// This function streamlines the process by finding the required binaries, similar to
+// setting the 'KUBEBUILDER_ASSETS' environment variable. To ensure the binaries are
+// properly set up, run 'make setup-envtest' beforehand.
 func getFirstFoundEnvTestBinaryDir() string {
 	basePath := filepath.Join("..", "..", "..", "bin", "k8s")
 	entries, err := os.ReadDir(basePath)
