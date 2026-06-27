@@ -94,7 +94,7 @@ var _ = Describe("ClaimerController", func() {
 		return p
 	}
 
-	reconcilePod := func(p *corev1.Pod) (reconcile.Result, error) {
+	reconcilePod := func(ctx context.Context, p *corev1.Pod) (reconcile.Result, error) {
 		return reconciler.Reconcile(ctx, reconcile.Request{
 			NamespacedName: client.ObjectKeyFromObject(p),
 		})
@@ -110,9 +110,7 @@ var _ = Describe("ClaimerController", func() {
 				)
 
 				By("reconciling the pod")
-				result, err := reconcilePod(p)
-				Expect(err).ShouldNot(HaveOccurred())
-				Expect(result).Should(Equal(reconcile.Result{}))
+				Expect(reconcilePod(ctx, p)).Should(Equal(reconcile.Result{}))
 
 				By("verifying the Claim was created with correct spec and owner reference")
 				claim := &v1alpha1.Claim{}
@@ -136,8 +134,7 @@ var _ = Describe("ClaimerController", func() {
 				)
 
 				By("reconciling the pod")
-				_, err := reconcilePod(p)
-				Expect(err).ShouldNot(HaveOccurred())
+				Expect(reconcilePod(ctx, p)).Error().ShouldNot(HaveOccurred())
 
 				By("verifying the pipeline label was copied to the Claim")
 				claim := &v1alpha1.Claim{}
@@ -156,8 +153,7 @@ var _ = Describe("ClaimerController", func() {
 				)
 
 				By("reconciling the pod")
-				_, err := reconcilePod(p)
-				Expect(err).ShouldNot(HaveOccurred())
+				Expect(reconcilePod(ctx, p)).Error().ShouldNot(HaveOccurred())
 
 				By("verifying the Claim has no pipeline label")
 				claim := &v1alpha1.Claim{}
@@ -176,14 +172,11 @@ var _ = Describe("ClaimerController", func() {
 				)
 
 				By("reconciling the pod")
-				result, err := reconcilePod(p)
-				Expect(err).ShouldNot(HaveOccurred())
-				Expect(result).Should(Equal(reconcile.Result{}))
+				Expect(reconcilePod(ctx, p)).Should(Equal(reconcile.Result{}))
 
 				By("verifying no Claim was created")
 				claim := &v1alpha1.Claim{}
-				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(p), claim)
-				Expect(apierrors.IsNotFound(err)).Should(BeTrue())
+				Expect(apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(p), claim))).Should(BeTrue())
 			})
 		})
 
@@ -195,16 +188,14 @@ var _ = Describe("ClaimerController", func() {
 					nil,
 				)
 
-				_, err := reconcilePod(p)
-				Expect(err).ShouldNot(HaveOccurred())
+				Expect(reconcilePod(ctx, p)).Error().ShouldNot(HaveOccurred())
 
 				By("recording the pod's resource version")
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(p), p)).Should(Succeed())
 				resourceVersion := p.ResourceVersion
 
 				By("reconciling the same pod again")
-				_, err = reconcilePod(p)
-				Expect(err).ShouldNot(HaveOccurred())
+				Expect(reconcilePod(ctx, p)).Error().ShouldNot(HaveOccurred())
 
 				By("verifying the pod was not modified")
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(p), p)).Should(Succeed())
