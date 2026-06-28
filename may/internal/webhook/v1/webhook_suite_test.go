@@ -75,8 +75,13 @@ var _ = BeforeSuite(func() {
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: false,
 
+		// Point to manifests.yaml directly instead of the config/webhook/ directory
+		// because envtest reads all YAML files as standalone resources and doesn't
+		// run kustomize — the patch file (manifests_patch.yaml) is incomplete on its own.
+		// To apply the kustomize patches (e.g. namespaceSelector), run kustomize build
+		// in BeforeSuite and point Paths to the output file.
 		WebhookInstallOptions: envtest.WebhookInstallOptions{
-			Paths: []string{filepath.Join("..", "..", "..", "config", "webhook")},
+			Paths: []string{filepath.Join("..", "..", "..", "config", "webhook", "manifests.yaml")},
 		},
 	}
 

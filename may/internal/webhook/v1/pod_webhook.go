@@ -64,5 +64,6 @@ func (d *PodCustomDefaulter) Default(_ context.Context, p *corev1.Pod) error {
 
 	g := corev1.PodSchedulingGate{Name: constants.MayPodSchedulingGate}
 	p.Spec.SchedulingGates = append(p.Spec.SchedulingGates, g)
+	podsGated.Inc()
 	return nil
 }
