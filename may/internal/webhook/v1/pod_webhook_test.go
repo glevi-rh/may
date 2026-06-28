@@ -64,6 +64,28 @@ var _ = Describe("Pod Webhook", func() {
 		})
 	})
 
+	When("pod already has the scheduling gate", func() {
+		It("should not add a duplicate gate or increment the metric", func(ctx context.Context) {
+			By("recording the metric value before defaulting")
+			before := testutil.ToFloat64(podsGated)
+
+			By("creating a pod that already has the scheduling gate")
+			p := newPod("already-gated-pod", map[string]string{pod.KueueFlavorLabelPrefix + "amd64": ""})
+			p.Spec.SchedulingGates = []corev1.PodSchedulingGate{
+				{Name: constants.MayPodSchedulingGate},
+			}
+
+			By("calling the defaulter")
+			Expect(defaulter.Default(ctx, p)).Should(Succeed())
+
+			By("verifying only one scheduling gate exists")
+			Expect(p.Spec.SchedulingGates).Should(HaveLen(1))
+
+			By("verifying the metric was not incremented")
+			Expect(testutil.ToFloat64(podsGated)).Should(Equal(before))
+		})
+	})
+
 	DescribeTable("should not gate the pod",
 		func(ctx context.Context, annotations map[string]string) {
 			By("recording the metric value before defaulting")
