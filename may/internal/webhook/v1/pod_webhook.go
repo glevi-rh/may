@@ -64,10 +64,9 @@ func (d *PodCustomDefaulter) Default(_ context.Context, p *corev1.Pod) error {
 	// As an example, we can use the webhook's NamespaceSelector field.
 
 	g := corev1.PodSchedulingGate{Name: constants.MayPodSchedulingGate}
-	if slices.Contains(p.Spec.SchedulingGates, g) {
-		return nil
+	if !slices.Contains(p.Spec.SchedulingGates, g) {
+		p.Spec.SchedulingGates = append(p.Spec.SchedulingGates, g)
+		podsGated.Inc()
 	}
-	p.Spec.SchedulingGates = append(p.Spec.SchedulingGates, g)
-	podsGated.Inc()
 	return nil
 }
