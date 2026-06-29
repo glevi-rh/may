@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -176,7 +176,7 @@ var _ = Describe("ClaimerController", func() {
 
 				By("verifying no Claim was created")
 				claim := &v1alpha1.Claim{}
-				Expect(apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(p), claim))).Should(BeTrue())
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(p), claim)).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
 			})
 		})
 

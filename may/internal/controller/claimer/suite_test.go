@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ limitations under the License.
 package claimer
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -32,7 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	maykonfluxcidevv1alpha1 "github.com/konflux-ci/may/api/v1alpha1"
-	// +kubebuilder:scaffold:imports
 )
 
 var (
@@ -47,14 +47,10 @@ func TestControllers(t *testing.T) {
 	RunSpecs(t, "Claimer Controller Suite")
 }
 
-var _ = BeforeSuite(func() {
+var _ = BeforeSuite(func(ctx context.Context) {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-	var err error
-	err = maykonfluxcidevv1alpha1.AddToScheme(scheme.Scheme)
-	Expect(err).ShouldNot(HaveOccurred())
-
-	// +kubebuilder:scaffold:scheme
+	Expect(maykonfluxcidevv1alpha1.AddToScheme(scheme.Scheme)).Should(Succeed())
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
@@ -66,6 +62,7 @@ var _ = BeforeSuite(func() {
 		testEnv.BinaryAssetsDirectory = getFirstFoundEnvTestBinaryDir()
 	}
 
+	var err error
 	cfg, err = testEnv.Start()
 	Expect(err).ShouldNot(HaveOccurred())
 	Expect(cfg).ShouldNot(BeNil())
@@ -75,7 +72,7 @@ var _ = BeforeSuite(func() {
 	Expect(k8sClient).ShouldNot(BeNil())
 })
 
-var _ = AfterSuite(func() {
+var _ = AfterSuite(func(ctx context.Context) {
 	By("tearing down the test environment")
 	err := testEnv.Stop()
 	Expect(err).ShouldNot(HaveOccurred())
