@@ -25,6 +25,7 @@ import (
 	"github.com/konflux-ci/may/api/v1alpha1"
 	"github.com/konflux-ci/may/pkg/constants"
 	"github.com/konflux-ci/may/pkg/pod"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -103,6 +104,9 @@ var _ = Describe("ClaimerController", func() {
 	Describe("Reconcile", func() {
 		When("a matching pod exists in a tenant namespace", func() {
 			It("should create a Claim with the correct flavor and owner reference", func(ctx context.Context) {
+				By("recording the current metric value")
+				oldValue := testutil.ToFloat64(claimCreated)
+
 				By("creating a pod with a flavor annotation")
 				p := createPod(ctx, tenantNs.Name,
 					map[string]string{pod.KueueFlavorLabelPrefix + flavor: ""},
@@ -122,6 +126,9 @@ var _ = Describe("ClaimerController", func() {
 
 				Expect(controllerutil.HasOwnerReference(claim.OwnerReferences, p, k8sClient.Scheme())).To(BeTrue())
 				Expect(controllerutil.HasControllerReference(claim)).To(BeTrue())
+
+				By("verifying may_claim_created metric incremented")
+				Expect(testutil.ToFloat64(claimCreated)).Should(Equal(oldValue + 1))
 			})
 		})
 
@@ -190,9 +197,10 @@ var _ = Describe("ClaimerController", func() {
 
 				Expect(reconcilePod(ctx, p)).Error().ShouldNot(HaveOccurred())
 
-				By("recording the pod's resource version")
+				By("recording the pod's resource version and metric value")
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(p), p)).Should(Succeed())
 				resourceVersion := p.ResourceVersion
+				metricValue := testutil.ToFloat64(claimCreated)
 
 				By("reconciling the same pod again")
 				Expect(reconcilePod(ctx, p)).Error().ShouldNot(HaveOccurred())
@@ -200,6 +208,9 @@ var _ = Describe("ClaimerController", func() {
 				By("verifying the pod was not modified")
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(p), p)).Should(Succeed())
 				Expect(p.ResourceVersion).Should(Equal(resourceVersion))
+
+				By("verifying may_claim_created metric did not change")
+				Expect(testutil.ToFloat64(claimCreated)).Should(Equal(metricValue))
 			})
 		})
 	})

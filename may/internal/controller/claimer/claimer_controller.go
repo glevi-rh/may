@@ -100,7 +100,11 @@ func (r *ClaimerController) ensureClaimExists(ctx context.Context, p corev1.Pod)
 		return err
 	}
 
-	return client.IgnoreAlreadyExists(r.Create(ctx, &c))
+	if err := r.Create(ctx, &c); err != nil {
+		return client.IgnoreAlreadyExists(err)
+	}
+	claimCreated.Inc()
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
