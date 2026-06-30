@@ -41,16 +41,13 @@ func newPod(name string, annotations map[string]string) *corev1.Pod {
 var _ = Describe("Pod Webhook", func() {
 	var defaulter PodCustomDefaulter
 
-	BeforeEach(func(ctx context.Context) {
+	BeforeEach(func() {
 		defaulter = PodCustomDefaulter{}
 	})
 
 	When("pod has a flavor annotation", func() {
-		It("should gate the pod and increment the metric", func(ctx context.Context) {
-			By("recording the metric value before defaulting")
-			before := testutil.ToFloat64(podsGated)
-
-			By("calling the defaulter")
+		It("should gate the pod", func(ctx context.Context) {
+			By("defaulting a pod with a flavor annotation")
 			p := newPod("test-pod", map[string]string{pod.KueueFlavorLabelPrefix + "amd64": ""})
 			Expect(defaulter.Default(ctx, p)).Should(Succeed())
 
@@ -58,52 +55,69 @@ var _ = Describe("Pod Webhook", func() {
 			Expect(p.Spec.SchedulingGates).Should(ContainElement(
 				corev1.PodSchedulingGate{Name: constants.MayPodSchedulingGate},
 			))
-
-			By("verifying the metric was incremented by 1")
-			Expect(testutil.ToFloat64(podsGated)).Should(Equal(before + 1))
 		})
 	})
 
 	When("pod already has the scheduling gate", func() {
-		It("should not add a duplicate gate or increment the metric", func(ctx context.Context) {
-			By("recording the metric value before defaulting")
-			before := testutil.ToFloat64(podsGated)
-
-			By("creating a pod that already has the scheduling gate")
+		It("should not add a duplicate gate", func(ctx context.Context) {
+			By("defaulting a pod that already has the scheduling gate")
 			p := newPod("already-gated-pod", map[string]string{pod.KueueFlavorLabelPrefix + "amd64": ""})
 			p.Spec.SchedulingGates = []corev1.PodSchedulingGate{
 				{Name: constants.MayPodSchedulingGate},
 			}
-
-			By("calling the defaulter")
 			Expect(defaulter.Default(ctx, p)).Should(Succeed())
 
 			By("verifying only one scheduling gate exists")
 			Expect(p.Spec.SchedulingGates).Should(HaveLen(1))
-
-			By("verifying the metric was not incremented")
-			Expect(testutil.ToFloat64(podsGated)).Should(Equal(before))
 		})
 	})
 
 	DescribeTable("should not gate the pod",
 		func(ctx context.Context, annotations map[string]string) {
-			By("recording the metric value before defaulting")
-			before := testutil.ToFloat64(podsGated)
-
-			By("calling the defaulter")
+			By("defaulting the pod")
 			p := newPod("test-pod", annotations)
 			Expect(defaulter.Default(ctx, p)).Should(Succeed())
 
 			By("verifying no scheduling gate was added")
 			Expect(p.Spec.SchedulingGates).Should(BeEmpty())
-
-			By("verifying the metric was not incremented")
-			Expect(testutil.ToFloat64(podsGated)).Should(Equal(before))
 		},
 		Entry("when pod has no flavor annotation",
 			map[string]string{"some-other": "annotation"}),
 		Entry("when pod has nil annotations",
 			nil),
 	)
+
+	// Serialize metric tests to keep counters consistent
+	Context("Metrics tests", Serial, func() {
+		It("should increment the metric when a pod is gated", func(ctx context.Context) {
+			By("recording the metric value before defaulting")
+			before := testutil.ToFloat64(podsGated)
+			Expect(defaulter.Default(ctx, newPod("test-pod", map[string]string{pod.KueueFlavorLabelPrefix + "amd64": ""}))).Should(Succeed())
+
+			By("verifying the metric was incremented by 1")
+			Expect(testutil.ToFloat64(podsGated)).Should(Equal(before + 1))
+		})
+
+		It("should not increment the metric when the pod already has the gate", func(ctx context.Context) {
+			By("recording the metric value before defaulting")
+			before := testutil.ToFloat64(podsGated)
+			p := newPod("already-gated-pod", map[string]string{pod.KueueFlavorLabelPrefix + "amd64": ""})
+			p.Spec.SchedulingGates = []corev1.PodSchedulingGate{
+				{Name: constants.MayPodSchedulingGate},
+			}
+			Expect(defaulter.Default(ctx, p)).Should(Succeed())
+
+			By("verifying the metric was not incremented")
+			Expect(testutil.ToFloat64(podsGated)).Should(Equal(before))
+		})
+
+		It("should not increment the metric when the pod is not gated", func(ctx context.Context) {
+			By("recording the metric value before defaulting")
+			before := testutil.ToFloat64(podsGated)
+			Expect(defaulter.Default(ctx, newPod("test-pod", map[string]string{"some-other": "annotation"}))).Should(Succeed())
+
+			By("verifying the metric was not incremented")
+			Expect(testutil.ToFloat64(podsGated)).Should(Equal(before))
+		})
+	})
 })
