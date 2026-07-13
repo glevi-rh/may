@@ -31,6 +31,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	maykonfluxcidevv1alpha1 "github.com/konflux-ci/may/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -56,8 +58,10 @@ var _ = BeforeSuite(func() {
 
 	ctx, cancel = context.WithCancel(context.TODO())
 
-	var err error
+	Expect(maykonfluxcidevv1alpha1.AddToScheme(scheme.Scheme)).Should(Succeed())
 	// +kubebuilder:scaffold:scheme
+
+	var err error
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
