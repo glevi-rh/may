@@ -250,7 +250,14 @@ func (r *ClaimReconciler) schedule(ctx context.Context, c *maykonfluxcidevv1alph
 
 	case scheduler.IsNoAvailableRunner(err):
 		l.Info("no runner available, can not schedule", "error", err)
-		if claim.SetNotClaimed(c, claim.ConditionReasonPending, "no available runner") {
+		if claim.SetNotClaimed(c, claim.ConditionReasonPending, err.Error()) {
+			return ctrl.Result{}, r.Status().Update(ctx, c)
+		}
+		return ctrl.Result{}, nil
+
+	case scheduler.IsNoAvailableRunnerForFlavor(err):
+		l.Info("no runner available for flavor, can not schedule", "error", err)
+		if claim.SetNotClaimed(c, claim.ConditionReasonPending, err.Error()) {
 			return ctrl.Result{}, r.Status().Update(ctx, c)
 		}
 		return ctrl.Result{}, nil

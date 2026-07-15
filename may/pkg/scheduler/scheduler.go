@@ -17,16 +17,21 @@ import (
 )
 
 var (
-	ErrNoAvailableRunner   error = fmt.Errorf("no available runner")
-	ErrClaimNotSchedulable error = fmt.Errorf("claim not schedulable")
+	ErrNoAvailableRunner          error = fmt.Errorf("no available runner")
+	ErrNoAvailableRunnerForFlavor error = fmt.Errorf("no available runner for flavor")
+	ErrClaimNotSchedulable        error = fmt.Errorf("claim not schedulable")
 )
 
+func IsNoAvailableRunnerForFlavor(err error) bool {
+	return errors.Is(err, ErrNoAvailableRunnerForFlavor)
+}
+
 func IsNoAvailableRunner(err error) bool {
-	return errors.Is(ErrNoAvailableRunner, err)
+	return errors.Is(err, ErrNoAvailableRunner)
 }
 
 func IsClaimNotSchedulable(err error) bool {
-	return errors.Is(ErrClaimNotSchedulable, err)
+	return errors.Is(err, ErrClaimNotSchedulable)
 }
 
 type Scheduler struct {
@@ -97,7 +102,7 @@ func (s *Scheduler) findBestRunner(
 			return &r, nil
 		}
 	}
-	return nil, fmt.Errorf("no runner available for flavor %v", f)
+	return nil, fmt.Errorf("%w %v", ErrNoAvailableRunnerForFlavor, f)
 }
 
 func (s *Scheduler) listFreeRunners(ctx context.Context) ([]maykonfluxcidevv1alpha1.Runner, error) {

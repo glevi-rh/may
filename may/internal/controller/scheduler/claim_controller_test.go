@@ -357,11 +357,24 @@ var _ = Describe("ClaimReconciler", func() {
 
 			By("reconciling the Claim")
 			_, err := reconcileClaim(ctx, c)
-			Expect(err).Should(HaveOccurred())
+			Expect(err).ShouldNot(HaveOccurred())
 
-			By("verifying the Claim stays Pending")
+			By("verifying the Claim stays Pending with flavor-specific message")
 			Expect(k8sCachedClient.Get(ctx, client.ObjectKeyFromObject(c), c)).Should(Succeed())
 			Expect(claim.IsPending(*c)).Should(BeTrue())
+			Expect(c.Status.Conditions).Should(
+				ContainElement(
+					WithTransform(func(cond metav1.Condition) metav1.Condition {
+						cond.LastTransitionTime = metav1.Time{}
+						return cond
+					}, Equal(metav1.Condition{
+						Status:  metav1.ConditionFalse,
+						Type:    claim.ConditionTypeClaimed,
+						Reason:  claim.ConditionReasonPending,
+						Message: scheduler.ErrNoAvailableRunnerForFlavor.Error() + " " + flavor,
+					})),
+				),
+			)
 
 			By("verifying the Runner was not reserved")
 			r := &mayv1alpha1.Runner{}
