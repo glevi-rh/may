@@ -55,7 +55,7 @@ var _ = Describe("RunnerBinder Controller", func() {
 		Expect(k8sClient.Delete(ctx, ns)).Should(Succeed())
 	})
 
-	createRunner := func(ctx context.Context, name string, inUseByName, inUseByNamespace string) *mayv1alpha1.Runner {
+	createRunner := func(ctx context.Context, name string, inUseBy *mayv1alpha1.ClaimReference) *mayv1alpha1.Runner {
 		r := &mayv1alpha1.Runner{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
@@ -66,24 +66,21 @@ var _ = Describe("RunnerBinder Controller", func() {
 				Resources: corev1.ResourceList{
 					corev1.ResourceName("amd64"): resource.MustParse("1"),
 				},
-				InUseBy: &mayv1alpha1.ClaimReference{
-					Name:      inUseByName,
-					Namespace: inUseByNamespace,
-				},
+				InUseBy: inUseBy,
 			},
 		}
 		Expect(k8sClient.Create(ctx, r)).Should(Succeed())
 		return r
 	}
 
-	createSecret := func(ctx context.Context, name, namespace string, data map[string][]byte) *corev1.Secret {
+	createSecret := func(ctx context.Context, name, namespace string, data map[string]string) *corev1.Secret {
 		s := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
 				Namespace: namespace,
 			},
-			Data: data,
-			Type: corev1.SecretTypeOpaque,
+			StringData: data,
+			Type:       corev1.SecretTypeOpaque,
 		}
 		Expect(k8sClient.Create(ctx, s)).Should(Succeed())
 		return s
@@ -111,16 +108,16 @@ var _ = Describe("RunnerBinder Controller", func() {
 	When("Runner exists but its Secret is missing", func() {
 		It("should return an error", func(ctx context.Context) {
 			By("creating a Runner with InUseBy set but no Secret and reconciling")
-			Expect(reconcileRunner(ctx, createRunner(ctx, "runner-no-secret", "some-claim", ns.Name))).Error().Should(HaveOccurred())
+			Expect(reconcileRunner(ctx, createRunner(ctx, "runner-no-secret", &mayv1alpha1.ClaimReference{Name: "some-claim", Namespace: ns.Name}))).Error().Should(HaveOccurred())
 		})
 	})
 
 	When("Runner exists and claimer Secret already exists", func() {
 		It("should return no error", func(ctx context.Context) {
 			By("creating a Runner, its Secret and the claimer Secret")
-			r := createRunner(ctx, "runner-with-secret", "existing-claim", ns.Name)
-			createSecret(ctx, r.Name, ns.Name, map[string][]byte{"id_rsa": []byte("dummy-key")})
-			createSecret(ctx, "existing-claim", ns.Name, map[string][]byte{"otp": []byte("already-exists")})
+			r := createRunner(ctx, "runner-with-secret", &mayv1alpha1.ClaimReference{Name: "existing-claim", Namespace: ns.Name})
+			createSecret(ctx, r.Name, ns.Name, map[string]string{"id_rsa": "dummy-key"})
+			createSecret(ctx, "existing-claim", ns.Name, map[string]string{"otp": "already-exists"})
 
 			By("reconciling the Runner")
 			Expect(reconcileRunner(ctx, r)).Should(Equal(reconcile.Result{}))
@@ -130,8 +127,8 @@ var _ = Describe("RunnerBinder Controller", func() {
 	When("Runner exists and OTP TLS cert Secret is missing", func() {
 		It("should return an error", func(ctx context.Context) {
 			By("creating a Runner and its Secret but no OTP TLS cert Secret")
-			createRunner(ctx, "runner-no-otp-cert", "missing-claim", ns.Name)
-			createSecret(ctx, "runner-no-otp-cert", ns.Name, map[string][]byte{"id_rsa": []byte("dummy-key")})
+			createRunner(ctx, "runner-no-otp-cert", &mayv1alpha1.ClaimReference{Name: "missing-claim", Namespace: ns.Name})
+			createSecret(ctx, "runner-no-otp-cert", ns.Name, map[string]string{"id_rsa": "dummy-key"})
 
 			By("reconciling the Runner")
 			Expect(reconcileRunner(ctx, &mayv1alpha1.Runner{ObjectMeta: metav1.ObjectMeta{Name: "runner-no-otp-cert", Namespace: ns.Name}})).Error().Should(HaveOccurred())
