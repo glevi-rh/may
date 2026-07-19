@@ -55,13 +55,20 @@ type PodCustomDefaulter struct {
 func (d *PodCustomDefaulter) Default(_ context.Context, p *corev1.Pod) error {
 	podlog.Info("Defaulting for Pod", "name", p.GetName())
 
-	if !pod.HasFlavor(p.Annotations) {
+	flavor, hasFlavor := pod.ExtractFlavor(p.Annotations)
+	if !hasFlavor {
 		return nil
 	}
 
 	// TODO(@konflux-ci): we may want to have a better pod matching,
 	// introducing the concepts of tenant or taskruns.
 	// As an example, we can use the webhook's NamespaceSelector field.
+
+	// --- Option 1: Static exclusion list ---
+	if pod.IsLocalFlavor(flavor) {
+		podlog.Info("skipping local flavor (option 1: static list)", "flavor", flavor)
+		return nil
+	}
 
 	g := corev1.PodSchedulingGate{Name: constants.MayPodSchedulingGate}
 	if !slices.Contains(p.Spec.SchedulingGates, g) {
