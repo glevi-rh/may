@@ -24,6 +24,7 @@ import (
 	"github.com/konflux-ci/may/pkg/constants"
 	"github.com/konflux-ci/may/pkg/pod"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -84,6 +85,16 @@ func (d *PodCustomDefaulter) Default(ctx context.Context, p *corev1.Pod) error {
 		return nil
 	}
 
+	// --- Option 3: Flavor CRD with spec.local ---
+	isLocal, err := d.isLocalFlavorCR(ctx, flavor)
+	if err != nil {
+		return err
+	}
+	if isLocal {
+		podlog.Info("skipping local flavor (option 3: Flavor CR)", "flavor", flavor)
+		return nil
+	}
+
 	g := corev1.PodSchedulingGate{Name: constants.MayPodSchedulingGate}
 	if !slices.Contains(p.Spec.SchedulingGates, g) {
 		p.Spec.SchedulingGates = append(p.Spec.SchedulingGates, g)
@@ -107,4 +118,13 @@ func (d *PodCustomDefaulter) isKnownFlavor(ctx context.Context, flavor string) (
 	}) || slices.ContainsFunc(staticHosts.Items, func(h v1alpha1.StaticHost) bool {
 		return h.Spec.Flavor == flavor
 	}), nil
+}
+
+// --- Option 3: checks the Flavor CR for spec.local ---
+func (d *PodCustomDefaulter) isLocalFlavorCR(ctx context.Context, flavor string) (bool, error) {
+	var f v1alpha1.Flavor
+	if err := d.reader.Get(ctx, types.NamespacedName{Name: flavor}, &f); err != nil {
+		return false, client.IgnoreNotFound(err)
+	}
+	return f.Spec.Local, nil
 }

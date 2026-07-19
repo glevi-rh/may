@@ -199,6 +199,65 @@ var _ = Describe("Pod Webhook", func() {
 		})
 	})
 
+	// --- Option 3: Flavor CRD with spec.local ---
+	When("a Flavor CR with spec.local=true exists for the flavor", func() {
+		It("should skip gating", func(ctx SpecContext) {
+			By("setting up a backend and a Flavor CR with local=true")
+			defaulter = defaulterWithObjects(
+				newDHA("aws-amd64", "aws-linux-amd64"),
+				&v1alpha1.Flavor{
+					ObjectMeta: metav1.ObjectMeta{Name: "aws-linux-amd64"},
+					Spec:       v1alpha1.FlavorSpec{Local: true},
+				},
+			)
+
+			By("defaulting the pod")
+			p := newPod("local-cr-pod", map[string]string{pod.KueueFlavorLabelPrefix + "aws-linux-amd64": ""})
+			Expect(defaulter.Default(ctx, p)).Should(Succeed())
+
+			By("verifying no scheduling gate was added")
+			Expect(p.Spec.SchedulingGates).Should(BeEmpty())
+		})
+	})
+
+	When("a Flavor CR with spec.local=false exists for the flavor", func() {
+		It("should gate the pod", func(ctx SpecContext) {
+			By("setting up a backend and a Flavor CR with local=false")
+			defaulter = defaulterWithObjects(
+				newDHA("aws-amd64", "aws-linux-amd64"),
+				&v1alpha1.Flavor{
+					ObjectMeta: metav1.ObjectMeta{Name: "aws-linux-amd64"},
+					Spec:       v1alpha1.FlavorSpec{Local: false},
+				},
+			)
+
+			By("defaulting the pod")
+			p := newPod("remote-cr-pod", map[string]string{pod.KueueFlavorLabelPrefix + "aws-linux-amd64": ""})
+			Expect(defaulter.Default(ctx, p)).Should(Succeed())
+
+			By("verifying the scheduling gate was added")
+			Expect(p.Spec.SchedulingGates).Should(ContainElement(
+				corev1.PodSchedulingGate{Name: constants.MayPodSchedulingGate},
+			))
+		})
+	})
+
+	When("no Flavor CR exists for the flavor", func() {
+		It("should gate the pod (fail-safe: absence of CR means remote)", func(ctx SpecContext) {
+			By("setting up a backend but no Flavor CR")
+			defaulter = defaulterWithObjects(newDHA("aws-amd64", "aws-linux-amd64"))
+
+			By("defaulting the pod")
+			p := newPod("no-cr-pod", map[string]string{pod.KueueFlavorLabelPrefix + "aws-linux-amd64": ""})
+			Expect(defaulter.Default(ctx, p)).Should(Succeed())
+
+			By("verifying the scheduling gate was added")
+			Expect(p.Spec.SchedulingGates).Should(ContainElement(
+				corev1.PodSchedulingGate{Name: constants.MayPodSchedulingGate},
+			))
+		})
+	})
+
 	// Serialize metric tests to keep counters consistent
 	Context("Metrics tests", Serial, func() {
 		It("should increment the metric when a pod is gated", func(ctx context.Context) {
