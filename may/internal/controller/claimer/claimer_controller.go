@@ -113,7 +113,7 @@ func (r *ClaimerController) SetupWithManager(mgr ctrl.Manager) error {
 		For(&corev1.Pod{}, builder.WithPredicates(predicate.Funcs{
 			CreateFunc: func(tce event.TypedCreateEvent[client.Object]) bool {
 				flavor, ok := pod.ExtractFlavor(tce.Object.GetAnnotations())
-				return ok && !pod.IsLocalFlavor(flavor)
+				return ok && !pod.IsExcludedFlavor(flavor)
 			},
 			UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool { return false },
 			DeleteFunc: func(tde event.TypedDeleteEvent[client.Object]) bool { return false },
